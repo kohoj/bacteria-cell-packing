@@ -1,21 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { CirclePackingData, HierarchyNode } from '../types';
 import { useCirclePacking } from '../hooks/use-circle-packing';
 import { CircleNode } from './circle-node';
 import { CircleLabel } from './circle-label';
+import { getVisibleNodes } from '../utils/circle-packing';
 
 interface CirclePackingChartProps {
   data: HierarchyNode;
   className?: string;
 }
 
-export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
+export const CirclePackingChart: React.FC<CirclePackingChartProps> = React.memo(({
   data,
   className = ''
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
-  const [hoveredNode, setHoveredNode] = useState<CirclePackingData | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   
   useEffect(() => {
     const updateDimensions = () => {
@@ -39,9 +40,40 @@ export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
     handleBackgroundClick
   } = useCirclePacking(data, dimensions.width, dimensions.height);
 
-  if (!packedData) return null;
+  // 缓存所有节点，避免每次渲染时重新计算
+  const allNodes = useMemo(() => {
+    if (!packedData) return [];
+    return packedData.descendants().slice(1);
+  }, [packedData]);
 
-  const allNodes = packedData.descendants().slice(1);
+  // 使用优化的视口裁剪函数
+  const visibleNodes = useMemo(() => {
+    if (!allNodes.length) return [];
+    return getVisibleNodes(allNodes, viewState, dimensions.width, dimensions.height, 100);
+  }, [allNodes, viewState, dimensions.width, dimensions.height]);
+
+  // 生成唯一的节点ID
+  const getNodeId = useCallback((node: CirclePackingData, index: number) => {
+    return `${node.data.name}-${node.depth}-${index}`;
+  }, []);
+
+  // 优化hover回调
+  const handleMouseEnter = useCallback((node: CirclePackingData, index: number) => {
+    const nodeId = getNodeId(node, index);
+    setHoveredNodeId(nodeId);
+  }, [getNodeId]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
+
+  // 找到hovered节点对象
+  const hoveredNode = useMemo(() => {
+    if (!hoveredNodeId) return null;
+    return visibleNodes.find((node, index) => getNodeId(node, index) === hoveredNodeId) || null;
+  }, [hoveredNodeId, visibleNodes, getNodeId]);
+
+  if (!packedData) return null;
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -60,30 +92,36 @@ export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
         className="drop-shadow-sm"
       >
         <g>
-          {allNodes.map((node: CirclePackingData, index: number) => (
-            <CircleNode
-              key={`${node.data.name}-${index}`}
-              node={node}
-              viewState={viewState}
-              width={dimensions.width}
-              colorScale={colorScale}
-              isHovered={hoveredNode === node}
-              onClick={handleNodeClick}
-              onMouseEnter={() => setHoveredNode(node)}
-              onMouseLeave={() => setHoveredNode(null)}
-            />
-          ))}
+          {visibleNodes.map((node: CirclePackingData, index: number) => {
+            const nodeId = getNodeId(node, index);
+            return (
+              <CircleNode
+                key={nodeId}
+                node={node}
+                viewState={viewState}
+                width={dimensions.width}
+                colorScale={colorScale}
+                isHovered={hoveredNodeId === nodeId}
+                onClick={handleNodeClick}
+                onMouseEnter={() => handleMouseEnter(node, index)}
+                onMouseLeave={handleMouseLeave}
+              />
+            );
+          })}
         </g>
         <g>
-          {packedData.descendants().map((node: CirclePackingData, index: number) => (
-            <CircleLabel
-              key={`label-${node.data.name}-${index}`}
-              node={node}
-              viewState={viewState}
-              width={dimensions.width}
-              focusNode={focusNode}
-            />
-          ))}
+          {visibleNodes.map((node: CirclePackingData, index: number) => {
+            const nodeId = getNodeId(node, index);
+            return (
+              <CircleLabel
+                key={`label-${nodeId}`}
+                node={node}
+                viewState={viewState}
+                width={dimensions.width}
+                focusNode={focusNode}
+              />
+            );
+          })}
         </g>
       </svg>
       
@@ -97,4 +135,4 @@ export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
       )}
     </div>
   );
-};
+});

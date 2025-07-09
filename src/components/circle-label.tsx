@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { CirclePackingData, ViewState } from '../types';
 import { calculateTransform } from '../utils/circle-packing';
 
@@ -9,21 +9,31 @@ interface CircleLabelProps {
   focusNode: CirclePackingData | null;
 }
 
-export const CircleLabel: React.FC<CircleLabelProps> = ({
+export const CircleLabel: React.FC<CircleLabelProps> = React.memo(({
   node,
   viewState,
   width,
   focusNode
 }) => {
-  const { x, y, r } = calculateTransform(node, [viewState.x, viewState.y, width / viewState.k], width);
+  // 缓存变换计算
+  const transform = useMemo(() => {
+    return calculateTransform(node, [viewState.x, viewState.y, width / viewState.k], width);
+  }, [node, viewState.x, viewState.y, viewState.k, width]);
 
-  const isVisible = focusNode && node.parent === focusNode;
-  const opacity = isVisible ? 1 : 0;
+  // 缓存可见性和样式计算
+  const labelStyle = useMemo(() => {
+    const { r } = transform;
+    const isVisible = focusNode && node.parent === focusNode;
+    const opacity = isVisible ? 1 : 0;
+    const fontSize = Math.max(10, Math.min(16, r / 6));
+    
+    return { isVisible, opacity, fontSize, shouldRender: r >= 20 };
+  }, [transform, focusNode, node.parent]);
 
-  if (r < 20) return null;
+  const { x, y } = transform;
 
-  // Dynamic font size based on circle radius
-  const fontSize = Math.max(10, Math.min(16, r / 6));
+  // 如果圆圈太小或不可见，不渲染
+  if (!labelStyle.shouldRender) return null;
 
   return (
     <text
@@ -31,13 +41,13 @@ export const CircleLabel: React.FC<CircleLabelProps> = ({
       y={y}
       textAnchor="middle"
       dominantBaseline="middle"
-      fontSize={fontSize}
+      fontSize={labelStyle.fontSize}
       fontFamily="-apple-system, BlinkMacSystemFont, Inter, sans-serif"
       fontWeight="500"
       fill="#374151"
       style={{
-        opacity,
-        transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        opacity: labelStyle.opacity,
+        transition: labelStyle.isVisible ? 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
         pointerEvents: 'none',
         userSelect: 'none'
       }}
@@ -45,4 +55,14 @@ export const CircleLabel: React.FC<CircleLabelProps> = ({
       {node.data.name}
     </text>
   );
-};
+}, (prevProps, nextProps) => {
+  // 自定义比较函数，只有真正相关的props变化时才重新渲染
+  return (
+    prevProps.node === nextProps.node &&
+    prevProps.viewState.x === nextProps.viewState.x &&
+    prevProps.viewState.y === nextProps.viewState.y &&
+    prevProps.viewState.k === nextProps.viewState.k &&
+    prevProps.width === nextProps.width &&
+    prevProps.focusNode === nextProps.focusNode
+  );
+});

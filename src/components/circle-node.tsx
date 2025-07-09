@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { CirclePackingData, ViewState } from '../types';
 import { calculateTransform } from '../utils/circle-packing';
 
@@ -13,7 +13,7 @@ interface CircleNodeProps {
   onMouseLeave: () => void;
 }
 
-export const CircleNode: React.FC<CircleNodeProps> = ({
+export const CircleNode: React.FC<CircleNodeProps> = React.memo(({
   node,
   viewState,
   width,
@@ -23,16 +23,14 @@ export const CircleNode: React.FC<CircleNodeProps> = ({
   onMouseEnter,
   onMouseLeave
 }) => {
-  const { x, y, r } = calculateTransform(node, [viewState.x, viewState.y, width / viewState.k], width);
+  // 缓存变换计算
+  const transform = useMemo(() => {
+    return calculateTransform(node, [viewState.x, viewState.y, width / viewState.k], width);
+  }, [node, viewState.x, viewState.y, viewState.k, width]);
 
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onClick(node);
-  };
-
-  // Modern color palette inspired by Apple/Linear/Raycast
-  const getModernColor = (depth: number): string => {
-    const colors = [
+  // 缓存颜色计算
+  const colors = useMemo(() => {
+    const modernColors = [
       '#f8fafc', // gray-50
       '#e2e8f0', // gray-200  
       '#cbd5e1', // gray-300
@@ -40,25 +38,36 @@ export const CircleNode: React.FC<CircleNodeProps> = ({
       '#64748b', // gray-500
       '#475569', // gray-600
     ];
-    return colors[Math.min(depth, colors.length - 1)];
-  };
+    
+    const fillColor = node.children ? modernColors[Math.min(node.depth, modernColors.length - 1)] : '#ffffff';
+    const strokeColor = isHovered ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)';
+    const strokeWidth = isHovered ? 2 : node.children ? 1 : 0;
+    
+    return { fillColor, strokeColor, strokeWidth };
+  }, [node.children, node.depth, isHovered]);
 
-  const fillColor = node.children ? getModernColor(node.depth) : '#ffffff';
-  const strokeColor = isHovered ? '#3b82f6' : 'rgba(148, 163, 184, 0.3)';
-  const strokeWidth = isHovered ? 2 : node.children ? 1 : 0;
+  const handleClick = useMemo(() => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClick(node);
+  }, [onClick, node]);
+
+  const { x, y, r } = transform;
+
+  // 如果圆圈太小，不渲染
+  if (r < 0.5) return null;
 
   return (
     <circle
       cx={x}
       cy={y}
       r={Math.max(0, r)}
-      fill={fillColor}
-      stroke={strokeColor}
-      strokeWidth={strokeWidth}
+      fill={colors.fillColor}
+      stroke={colors.strokeColor}
+      strokeWidth={colors.strokeWidth}
       style={{
         cursor: node.children ? 'pointer' : 'default',
         pointerEvents: node.children ? 'auto' : 'none',
-        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: isHovered ? 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)' : 'none',
         filter: isHovered ? 'drop-shadow(0 4px 12px rgba(59, 130, 246, 0.15))' : 'none'
       }}
       onClick={handleClick}
@@ -66,4 +75,14 @@ export const CircleNode: React.FC<CircleNodeProps> = ({
       onMouseLeave={onMouseLeave}
     />
   );
-};
+}, (prevProps, nextProps) => {
+  // 自定义比较函数，只有真正相关的props变化时才重新渲染
+  return (
+    prevProps.node === nextProps.node &&
+    prevProps.viewState.x === nextProps.viewState.x &&
+    prevProps.viewState.y === nextProps.viewState.y &&
+    prevProps.viewState.k === nextProps.viewState.k &&
+    prevProps.width === nextProps.width &&
+    prevProps.isHovered === nextProps.isHovered
+  );
+});

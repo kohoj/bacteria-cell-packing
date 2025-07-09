@@ -57,15 +57,55 @@ export const interpolateZoom = (
   return d3.interpolateZoom(view, target);
 };
 
+// 优化的transform计算函数，添加了性能优化
 export const calculateTransform = (
   node: CirclePackingData,
   view: [number, number, number],
   width: number
 ) => {
-  const k = width / view[2];
-  const x = (node.x - view[0]) * k;
-  const y = (node.y - view[1]) * k;
+  const [viewX, viewY, viewScale] = view;
+  
+  // 快速计算缩放比例
+  const k = width / viewScale;
+  
+  // 计算相对位置
+  const dx = node.x - viewX;
+  const dy = node.y - viewY;
+  
+  // 应用缩放变换
+  const x = dx * k;
+  const y = dy * k;
   const r = node.r * k;
   
   return { x, y, r, k };
+};
+
+// 新增：快速检查节点是否在视口内
+export const isNodeInViewport = (
+  node: CirclePackingData,
+  viewState: { x: number; y: number; k: number },
+  width: number,
+  height: number,
+  margin: number = 100
+): boolean => {
+  const transform = calculateTransform(node, [viewState.x, viewState.y, width / viewState.k], width);
+  
+  return (
+    transform.x + transform.r > -margin &&
+    transform.x - transform.r < width + margin &&
+    transform.y + transform.r > -margin &&
+    transform.y - transform.r < height + margin &&
+    transform.r > 0.5
+  );
+};
+
+// 新增：批量计算可见节点，提高性能
+export const getVisibleNodes = (
+  nodes: CirclePackingData[],
+  viewState: { x: number; y: number; k: number },
+  width: number,
+  height: number,
+  margin: number = 100
+): CirclePackingData[] => {
+  return nodes.filter(node => isNodeInViewport(node, viewState, width, height, margin));
 };
