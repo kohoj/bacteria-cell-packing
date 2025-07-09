@@ -20,7 +20,10 @@ export const CircleLabel: React.FC<CircleLabelProps> = ({
   const isVisible = focusNode && node.parent === focusNode;
   const opacity = isVisible ? 1 : 0;
 
-  if (r < 15) return null;
+  if (r < 20) return null;
+
+  // Dynamic font size based on circle radius
+  const fontSize = Math.max(10, Math.min(16, r / 6));
 
   return (
     <text
@@ -28,12 +31,13 @@ export const CircleLabel: React.FC<CircleLabelProps> = ({
       y={y}
       textAnchor="middle"
       dominantBaseline="middle"
-      fontSize="10"
-      fontFamily="sans-serif"
-      fill="currentColor"
+      fontSize={fontSize}
+      fontFamily="-apple-system, BlinkMacSystemFont, Inter, sans-serif"
+      fontWeight="500"
+      fill="#374151"
       style={{
         opacity,
-        transition: 'opacity 0.3s ease',
+        transition: 'opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         pointerEvents: 'none',
         userSelect: 'none'
       }}

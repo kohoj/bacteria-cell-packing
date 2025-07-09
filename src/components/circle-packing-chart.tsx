@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CirclePackingData, HierarchyNode } from '../types';
 import { useCirclePacking } from '../hooks/use-circle-packing';
 import { CircleNode } from './circle-node';
@@ -6,19 +6,30 @@ import { CircleLabel } from './circle-label';
 
 interface CirclePackingChartProps {
   data: HierarchyNode;
-  width?: number;
-  height?: number;
   className?: string;
 }
 
 export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
   data,
-  width = 928,
-  height = 928,
   className = ''
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [hoveredNode, setHoveredNode] = useState<CirclePackingData | null>(null);
   
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        setDimensions({ width: clientWidth, height: clientHeight });
+      }
+    };
+
+    updateDimensions();
+    window.addEventListener('resize', updateDimensions);
+    return () => window.removeEventListener('resize', updateDimensions);
+  }, []);
+
   const {
     packedData,
     focusNode,
@@ -26,34 +37,35 @@ export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
     colorScale,
     handleNodeClick,
     handleBackgroundClick
-  } = useCirclePacking(data, width, height);
+  } = useCirclePacking(data, dimensions.width, dimensions.height);
 
   if (!packedData) return null;
 
   const allNodes = packedData.descendants().slice(1);
 
   return (
-    <div className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`}>
       <svg
-        width={width}
-        height={height}
-        viewBox={`${-width / 2} ${-height / 2} ${width} ${height}`}
+        width={dimensions.width}
+        height={dimensions.height}
+        viewBox={`${-dimensions.width / 2} ${-dimensions.height / 2} ${dimensions.width} ${dimensions.height}`}
         style={{ 
-          width: `${width}px`,
-          height: `${height}px`,
+          width: '100%',
+          height: '100%',
           display: 'block',
-          background: colorScale(0),
+          background: '#fafafa',
           cursor: 'pointer'
         }}
         onClick={handleBackgroundClick}
+        className="drop-shadow-sm"
       >
         <g>
-          {allNodes.map((node, index) => (
+          {allNodes.map((node: CirclePackingData, index: number) => (
             <CircleNode
               key={`${node.data.name}-${index}`}
               node={node}
               viewState={viewState}
-              width={width}
+              width={dimensions.width}
               colorScale={colorScale}
               isHovered={hoveredNode === node}
               onClick={handleNodeClick}
@@ -63,23 +75,23 @@ export const CirclePackingChart: React.FC<CirclePackingChartProps> = ({
           ))}
         </g>
         <g>
-          {packedData.descendants().map((node, index) => (
+          {packedData.descendants().map((node: CirclePackingData, index: number) => (
             <CircleLabel
               key={`label-${node.data.name}-${index}`}
               node={node}
               viewState={viewState}
-              width={width}
+              width={dimensions.width}
               focusNode={focusNode}
             />
           ))}
         </g>
       </svg>
       
-      {focusNode && (
-        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-2 rounded-lg shadow-lg">
-          <h3 className="font-medium text-gray-800">{focusNode.data.name}</h3>
-          {focusNode.data.value && (
-            <p className="text-sm text-gray-600">Value: {focusNode.data.value}</p>
+      {hoveredNode && (
+        <div className="absolute top-6 left-6 bg-white/80 backdrop-blur-md px-3 py-2 rounded-xl shadow-lg border border-white/20 animate-slide-up">
+          <div className="text-sm font-medium text-gray-800">{hoveredNode.data.name}</div>
+          {hoveredNode.data.value && (
+            <div className="text-xs text-gray-500 mt-1">{hoveredNode.data.value}</div>
           )}
         </div>
       )}
